@@ -1,0 +1,33 @@
+{
+"KF":{
+"Metadata":{"indexColumn":"CampaignKey"},
+"Queries":
+[
+        {
+        "sourceQuery":"SELECT c.CustomerKey,c.CustomerName,cc.RetailerKey,cc.RetailerName,cc.CampaignKey,cc.CampaignID,CampaignName,CampaignType,BeginDate,EndDate,L.LookupName as CalculationMethod,clst.TestStoreCount,clst.ControlStoreCount,CampaignStatus,CampaignState,CustomerType,TotalStoreCount,cc.VendorName,case when cc.Impressions > 0 then Impressions else [ApproximateRevenue]/6*1000 end as EstImpressions,(datediff(day,BeginDate,EndDate)+1.0)/7 as CampaignWeeks FROM [DSD].[Customers] c JOIN [DSS].[Campaigns] cc ON c.Customerkey = cc.Customerkey JOIN [RPT].[DisplayMethodologyLookup] dml on cc.CampaignKey = dml.CampaignKey JOIN [DSS].[LookUpValues] l on l.LookUpType = 'CalculationMethod' and l.LookUpKey = dml.CalculationMethodKey CROSS APPLY (SELECT SUM(CASE WHEN Clustername = 'T' THEN 1 ELSE 0 END) AS TestStoreCount,SUM(CASE WHEN Clustername = 'C' THEN 1 ELSE 0 END) AS ControlStoreCount FROM [DSS].[vwCampaignClusters] WHERE CampaignKey = cc.CampaignKey AND Clustertype = 'TVC' AND Clustername IN ('T','C')) clst CROSS APPLY (SELECT COUNT(DISTINCT(STOREID)) AS TotalStoreCount FROM DSD.vwStoreMasterData s WHERE s.RetailerKey = cc.RetailerKey AND s.COUNTRY = 'United States') smd WHERE c.Active='Y' AND cc.[EndDate] < dateadd(ww,-3, getdate()) and cc.[CampaignID] not in ('MO5tgther','OIQ00060','001C7KKc','nh1EjnKo','001DCu6A','001AG3h0','001AoH3Da') and cc.[CampaignStatus] not in ('Cancelled','OnHold') and c.[CustomerName] <> 'RetailSolutionsInc' and cc.[CampaignState] not in ('CS','IC','ID','NEW') and cc.[CampaignID] not like 't%' and cc.[CampaignID] not like 'r%' and cc.[CampaignID] not like 'PRT%' and cc.[CampaignKey] is not null;",        
+        "module":"MetaData",
+        "operation":"merge"
+        },
+        {
+        "sourceQuery":"SELECT CPM.CampaignKey, ROUND(MAX(CASE WHEN AggregateType = 'Featured' and ME.LookUpCode = 'SLM' THEN CPM.MetricValue END)*MAX(CASE WHEN AggregateType = 'Featured' and ME.LookUpCode = 'IS' THEN CPM.MetricValue END)/(MAX(CASE WHEN AggregateType = 'Featured' and ME.LookUpCode = 'SLM' THEN CPM.MetricValue END)-.9999999999999999999),0) as EstFeaturedCampaignTestSales, MAX(CASE WHEN AggregateType = 'Featured' and ME.LookUpCode = 'SLM' THEN CPM.MetricValue END) AS  ReportedFeaturedSalesLiftMultiplier, MAX(CASE WHEN AggregateType = 'Featured' and ME.LookUpCode = 'IS' THEN CPM.MetricValue END)  AS ReportedFeaturedIncrementalSales, MAX(CASE WHEN AggregateType = 'Featured' and ME.LookUpCode = 'SPV' THEN CPM.MetricValue END) AS ReportedFeaturedSalesPValue, ROUND(MAX(CASE WHEN AggregateType = 'Halo' and ME.LookUpCode = 'SLM' THEN CPM.MetricValue END)*MAX(CASE WHEN AggregateType = 'Halo' and ME.LookUpCode = 'IS' THEN CPM.MetricValue END)/(MAX(CASE WHEN AggregateType = 'Halo' and ME.LookUpCode = 'SLM' THEN CPM.MetricValue END)-.9999999999999999999),0) as EstHaloCampaignTestSales, MAX(CASE WHEN AggregateType = 'Halo' and ME.LookUpCode = 'SLM' THEN CPM.MetricValue END) AS  ReportedHaloSalesLiftMultiplier, MAX(CASE WHEN AggregateType = 'Halo' and ME.LookUpCode = 'IS' THEN CPM.MetricValue END) AS ReportedHaloIncrementalSales, MAX(CASE WHEN AggregateType = 'Halo' and ME.LookUpCode = 'SPV' THEN CPM.MetricValue END) AS ReportedHaloSalesPValue FROM (SELECT CPA.*, AggregateType, RANK() OVER(PARTITION BY CPA.CampaignKey, AggregateType ORDER BY CPA.Productkey DESC) AS AggregateRnk FROM [RPT].[CPMByProductAggregate] CPA JOIN RPT.DisplayMethodologyLookup DML ON CPA.CampaignKey = DML.CampaignKey AND CPA.CalculationMethodKey=DML.CalculationMethodKey JOIN [DSS].CampaignProducts CP ON CPA.CampaignKey = CP.CampaignKey  AND CPA.ProductKey = CP.ProductKey) CPM JOIN [DSS].[LookUpValues] CM ON CM.LookUpType = 'CalculationMethod' AND CM.LookUpKey = CPM.CalculationMethodKey JOIN [DSS].[LookUpValues] ME ON ME.LookUpType = 'Metrics' AND  ME.LookUpKey = CPM.MetricKey WHERE CPM.AggregateRnk = 1 GROUP BY CPM.CampaignKey ORDER BY campaignkey;",
+        "module":"Results",
+        "operation":"merge"
+        },
+        {
+        "sourceQuery":"SELECT SP.CampaignKey, AVG(case when AggregateType = 'Featured' then StorePerformanceRatio else null end)-1 as AvgFeaturedTestSPR, AVG(case when AggregateType = 'Halo' then StorePerformanceRatio else null end)-1 as AvgHaloTestSPR FROM [RPT].[StorePerformance]  SP JOIN ( SELECT CP.CampaignKey,ProductKey,AggregateType,AggregateName,RANK() OVER(PARTITION BY CP.CampaignKey,AggregateType ORDER BY Productkey DESC) AS AggregateRnk FROM [DSS].CampaignProducts  CP) PRD ON SP.CampaignKey = PRD.CampaignKey AND SP.ProductKey = PRD.ProductKey AND PRD.AggregateRnk=1 JOIN [DSS].[vwCampaignClusters] CC ON SP.CampaignKey = CC.CampaignKey AND CC.Storeid = SP.StoreID WHERE CC.Clustertype = 'TVC' AND StorePerformanceRatio > 0  AND SP.ClusterName = 'T' AND AggregateType in ('Featured','Halo') GROUP BY SP.CampaignKey  ORDER by SP.CampaignKey;",
+        "module":"SPRs",
+        "operation":"merge"
+        },
+        {
+        "sourceQuery":"SELECT CampaignKey,0.01*SalesCoveragePercentage as SalesCoverage, 0.01*StoreCoveragePercentage as StoreCoverage, 0.01*SpendingEfficiencyPercentage as TargetingEfficiency from [DSS].[TVCResponse] order by campaignkey;",
+        "module":"TVCResponse",
+        "operation":"merge"        
+        },
+        {
+        "sourceQuery":"SELECT CampaignKey,TestStoreCount,ControlStoreCount,TotalStoreCount from [DSS].[TVCResponse] order by campaignkey;",
+        "module":"TVCResponse",
+        "operation":"update"        
+        }
+]
+}
+}
